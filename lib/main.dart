@@ -16,13 +16,109 @@ class LaHabittatApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const HabitsListScreen(),
+      home: const MainNavigationScreen(),
     );
   }
 }
 
-class HabitsListScreen extends StatelessWidget {
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
+
+  @override
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+}
+
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = [
+    const HabitsListScreen(),
+    const StatisticsScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _screens[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list),
+            label: 'Привычки',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Статистика',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class HabitsListScreen extends StatefulWidget {
   const HabitsListScreen({super.key});
+
+  @override
+  State<HabitsListScreen> createState() => _HabitsListScreenState();
+}
+
+class _HabitsListScreenState extends State<HabitsListScreen> {
+  final List<Habit> _habits = [
+    /*Habit(
+      name: 'Пить воду 2л',
+      isCompletedToday: false,
+      weekProgress: [true, true, false, true, false, false, false],
+    ),
+    Habit(
+      name: 'Читать 30 минут',
+      isCompletedToday: true,
+      weekProgress: [true, true, true, true, true, false, false],
+    ),*/
+  ];
+
+  void _addHabit(String habitName) {
+    if (habitName.trim().isEmpty) return;
+
+    setState(() {
+      _habits.add(Habit(
+        name: habitName.trim(),
+        isCompletedToday: false,
+        weekProgress: List.filled(7, false),
+      ));
+    });
+  }
+
+  void _toggleHabitCompletion(int index) {
+    setState(() {
+      _habits[index].isCompletedToday = !_habits[index].isCompletedToday;
+
+      // Обновляем прогресс за неделю (простая логика)
+      final today = DateTime.now().weekday - 1; // 0-6 для понедельника-воскресенья
+      if (today < _habits[index].weekProgress.length) {
+        _habits[index].weekProgress[today] = _habits[index].isCompletedToday;
+      }
+    });
+  }
+
+  void _navigateToAddHabit() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddHabitScreen(),
+      ),
+    );
+
+    if (result != null && result is String) {
+      _addHabit(result);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +156,9 @@ class HabitsListScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '"The secret of getting ahead is getting started."',
+                  _habits.isEmpty
+                      ? '"Начните добавлять привычки для отслеживания прогресса!"'
+                      : '"The secret of getting ahead is getting started."',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.grey[800],
@@ -70,7 +168,7 @@ class HabitsListScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '- Mark Twain',
+                  _habits.isEmpty ? '- LaHabittat' : '- Mark Twain',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -88,7 +186,7 @@ class HabitsListScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Мои привычки',
+                  'Мои привычки (${_habits.length})',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -110,42 +208,52 @@ class HabitsListScreen extends StatelessWidget {
 
           // Список привычек
           Expanded(
-            child: ListView(
+            child: _habits.isEmpty
+                ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.psychology_outlined,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Пока нет привычек',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Нажмите + чтобы добавить первую привычку',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+                : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: const [
-                HabitItem(
-                  habitName: 'Пить воду 2л',
-                  isCompletedToday: false,
-                  weekProgress: [true, true, false, true, false, false, false],
-                ),
-                HabitItem(
-                  habitName: 'Читать 30 минут',
-                  isCompletedToday: true,
-                  weekProgress: [true, true, true, true, true, false, false],
-                ),
-                HabitItem(
-                  habitName: 'Утренняя зарядка',
-                  isCompletedToday: false,
-                  weekProgress: [false, true, false, true, false, false, false],
-                ),
-                HabitItem(
-                  habitName: 'Изучать английский',
-                  isCompletedToday: false,
-                  weekProgress: [true, false, true, false, true, false, false],
-                ),
-              ],
+              itemCount: _habits.length,
+              itemBuilder: (context, index) {
+                return HabitItem(
+                  habit: _habits[index],
+                  onTap: () => _toggleHabitCompletion(index),
+                );
+              },
             ),
           ),
         ],
       ),
       // Кнопка добавления новой привычки
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddHabitScreen()),
-          );
-        },
+        onPressed: _navigateToAddHabit,
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         child: const Icon(Icons.add, size: 28),
@@ -154,16 +262,26 @@ class HabitsListScreen extends StatelessWidget {
   }
 }
 
+class Habit {
+  String name;
+  bool isCompletedToday;
+  List<bool> weekProgress;
+
+  Habit({
+    required this.name,
+    required this.isCompletedToday,
+    required this.weekProgress,
+  });
+}
+
 class HabitItem extends StatelessWidget {
-  final String habitName;
-  final bool isCompletedToday;
-  final List<bool> weekProgress;
+  final Habit habit;
+  final VoidCallback onTap;
 
   const HabitItem({
     super.key,
-    required this.habitName,
-    required this.isCompletedToday,
-    required this.weekProgress,
+    required this.habit,
+    required this.onTap,
   });
 
   @override
@@ -171,75 +289,104 @@ class HabitItem extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Чекбокс для отметки выполнения
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: isCompletedToday ? Colors.green : Colors.transparent,
-                border: Border.all(
-                  color: isCompletedToday ? Colors.green : Colors.grey,
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: isCompletedToday
-                  ? const Icon(
-                Icons.check,
-                color: Colors.white,
-                size: 16,
-              )
-                  : null,
-            ),
-
-            const SizedBox(width: 16),
-
-            // Название привычки
-            Expanded(
-              child: Text(
-                habitName,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ),
-
-            // Индикаторы недельного прогресса
-            Row(
-              children: weekProgress.map((isDone) {
-                return Container(
-                  margin: const EdgeInsets.only(left: 2),
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: isDone ? Colors.green : Colors.grey[300],
-                    shape: BoxShape.circle,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Чекбокс для отметки выполнения
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: habit.isCompletedToday ? Colors.green : Colors.transparent,
+                  border: Border.all(
+                    color: habit.isCompletedToday ? Colors.green : Colors.grey,
+                    width: 2,
                   ),
-                  child: isDone
-                      ? const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 8,
-                  )
-                      : null,
-                );
-              }).toList(),
-            ),
-          ],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: habit.isCompletedToday
+                    ? const Icon(
+                  Icons.check,
+                  color: Colors.white,
+                  size: 16,
+                )
+                    : null,
+              ),
+
+              const SizedBox(width: 16),
+
+              // Название привычки
+              Expanded(
+                child: Text(
+                  habit.name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                    decoration: habit.isCompletedToday
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                  ),
+                ),
+              ),
+
+              // Индикаторы недельного прогресса
+              Row(
+                children: habit.weekProgress.map((isDone) {
+                  return Container(
+                    margin: const EdgeInsets.only(left: 2),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: isDone ? Colors.green : Colors.grey[300],
+                      shape: BoxShape.circle,
+                    ),
+                    child: isDone
+                        ? const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 8,
+                    )
+                        : null,
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class AddHabitScreen extends StatelessWidget {
+class AddHabitScreen extends StatefulWidget {
   const AddHabitScreen({super.key});
+
+  @override
+  State<AddHabitScreen> createState() => _AddHabitScreenState();
+}
+
+class _AddHabitScreenState extends State<AddHabitScreen> {
+  final TextEditingController _habitController = TextEditingController();
+
+  void _saveHabit() {
+    if (_habitController.text.trim().isNotEmpty) {
+      Navigator.pop(context, _habitController.text);
+    }
+  }
+
+  void _cancel() {
+    Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    _habitController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -253,12 +400,6 @@ class AddHabitScreen extends StatelessWidget {
         ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -281,6 +422,7 @@ class AddHabitScreen extends StatelessWidget {
 
             // Поле для ввода названия привычки
             TextField(
+              controller: _habitController,
               decoration: InputDecoration(
                 hintText: 'Например: Бегать по утрам',
                 border: OutlineInputBorder(
@@ -297,6 +439,7 @@ class AddHabitScreen extends StatelessWidget {
                 ),
               ),
               style: const TextStyle(fontSize: 16),
+              onSubmitted: (_) => _saveHabit(),
             ),
 
             const Spacer(),
@@ -307,9 +450,7 @@ class AddHabitScreen extends StatelessWidget {
                 // Кнопка "Отменить"
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
+                    onPressed: _cancel,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -332,10 +473,7 @@ class AddHabitScreen extends StatelessWidget {
                 // Кнопка "Сохранить"
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      //
-                      Navigator.pop(context);
-                    },
+                    onPressed: _saveHabit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
@@ -355,6 +493,55 @@ class AddHabitScreen extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class StatisticsScreen extends StatelessWidget {
+  const StatisticsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Статистика',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.bar_chart,
+              size: 64,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Статистика будет доступна',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'после добавления и отслеживания привычек',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
