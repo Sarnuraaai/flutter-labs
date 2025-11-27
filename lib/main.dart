@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_labs/ui/LaHabittat/view_models/quote_view_model.dart';
+import 'package:flutter_labs/ui/LaHabittat/view_models/habit_view_model.dart';
+import 'package:flutter_labs/data/models/habit.dart';
 
 void main() {
   runApp(const LaHabittatApp());
@@ -9,14 +13,20 @@ class LaHabittatApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'LaHabittat',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => HabitViewModel()),
+        ChangeNotifierProvider(create: (_) => QuoteViewModel()),
+      ],
+      child: MaterialApp(
+        title: 'LaHabittat',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: const MainNavigationScreen(),
       ),
-      home: const MainNavigationScreen(),
     );
   }
 }
@@ -70,40 +80,12 @@ class HabitsListScreen extends StatefulWidget {
 }
 
 class _HabitsListScreenState extends State<HabitsListScreen> {
-  final List<Habit> _habits = [
-    /*Habit(
-      name: 'Пить воду 2л',
-      isCompletedToday: false,
-      weekProgress: [true, true, false, true, false, false, false],
-    ),
-    Habit(
-      name: 'Читать 30 минут',
-      isCompletedToday: true,
-      weekProgress: [true, true, true, true, true, false, false],
-    ),*/
-  ];
-
-  void _addHabit(String habitName) {
-    if (habitName.trim().isEmpty) return;
-
-    setState(() {
-      _habits.add(Habit(
-        name: habitName.trim(),
-        isCompletedToday: false,
-        weekProgress: List.filled(7, false),
-      ));
-    });
-  }
-
-  void _toggleHabitCompletion(int index) {
-    setState(() {
-      _habits[index].isCompletedToday = !_habits[index].isCompletedToday;
-
-      // Обновляем прогресс за неделю (простая логика)
-      final today = DateTime.now().weekday - 1; // 0-6 для понедельника-воскресенья
-      if (today < _habits[index].weekProgress.length) {
-        _habits[index].weekProgress[today] = _habits[index].isCompletedToday;
-      }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HabitViewModel>().loadHabits();
+      context.read<QuoteViewModel>().loadRandomQuote();
     });
   }
 
@@ -116,12 +98,15 @@ class _HabitsListScreenState extends State<HabitsListScreen> {
     );
 
     if (result != null && result is String) {
-      _addHabit(result);
+      await context.read<HabitViewModel>().addHabit(result);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final habitViewModel = context.watch<HabitViewModel>();
+    final quoteViewModel = context.watch<QuoteViewModel>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -138,46 +123,7 @@ class _HabitsListScreenState extends State<HabitsListScreen> {
       body: Column(
         children: [
           // Блок с мотивирующей цитатой
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade100),
-            ),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.lightbulb_outline,
-                  color: Colors.amber,
-                  size: 32,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _habits.isEmpty
-                      ? '"Начните добавлять привычки для отслеживания прогресса!"'
-                      : '"The secret of getting ahead is getting started."',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[800],
-                    fontStyle: FontStyle.italic,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _habits.isEmpty ? '- LaHabittat' : '- Mark Twain',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
+          _buildQuoteCard(quoteViewModel),
 
           // Заголовок списка привычек
           Padding(
@@ -186,7 +132,7 @@ class _HabitsListScreenState extends State<HabitsListScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Мои привычки (${_habits.length})',
+                  'Мои привычки (${habitViewModel.habits.length})',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -208,7 +154,9 @@ class _HabitsListScreenState extends State<HabitsListScreen> {
 
           // Список привычек
           Expanded(
-            child: _habits.isEmpty
+            child: habitViewModel.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : habitViewModel.habits.isEmpty
                 ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -240,18 +188,19 @@ class _HabitsListScreenState extends State<HabitsListScreen> {
             )
                 : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _habits.length,
+              itemCount: habitViewModel.habits.length,
               itemBuilder: (context, index) {
+                final habit = habitViewModel.habits[index];
                 return HabitItem(
-                  habit: _habits[index],
-                  onTap: () => _toggleHabitCompletion(index),
+                  habit: habit,
+                  onTap: () => habitViewModel.toggleHabitCompletion(habit),
+                  onDelete: () => habitViewModel.deleteHabit(habit.id!),
                 );
               },
             ),
           ),
         ],
       ),
-      // Кнопка добавления новой привычки
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddHabit,
         backgroundColor: Colors.blue,
@@ -260,28 +209,132 @@ class _HabitsListScreenState extends State<HabitsListScreen> {
       ),
     );
   }
-}
 
-class Habit {
-  String name;
-  bool isCompletedToday;
-  List<bool> weekProgress;
+  Widget _buildQuoteCard(QuoteViewModel quoteViewModel) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.lightbulb_outline,
+            color: Colors.amber,
+            size: 32,
+          ),
+          const SizedBox(height: 8),
 
-  Habit({
-    required this.name,
-    required this.isCompletedToday,
-    required this.weekProgress,
-  });
+          if (quoteViewModel.isLoading)
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text('Загрузка цитаты...'),
+              ],
+            )
+          else if (quoteViewModel.error != null)
+            Column(
+              children: [
+                Text(
+                  '"Начните добавлять привычки для отслеживания прогресса!"',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[800],
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '- LaHabittat',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => quoteViewModel.loadRandomQuote(),
+                  tooltip: 'Обновить цитату',
+                ),
+              ],
+            )
+          else if (quoteViewModel.quote != null)
+              Column(
+                children: [
+                  Text(
+                    '"${quoteViewModel.quote!.text}"',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[800],
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '- ${quoteViewModel.quote!.author}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () => quoteViewModel.loadRandomQuote(),
+                    tooltip: 'Новая цитата',
+                  ),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  Text(
+                    '"The secret of getting ahead is getting started."',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[800],
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '- Mark Twain',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+        ],
+      ),
+    );
+  }
 }
 
 class HabitItem extends StatelessWidget {
   final Habit habit;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   const HabitItem({
     super.key,
     required this.habit,
     required this.onTap,
+    required this.onDelete,
   });
 
   @override
@@ -353,6 +406,15 @@ class HabitItem extends StatelessWidget {
                         : null,
                   );
                 }).toList(),
+              ),
+
+              const SizedBox(width: 8),
+
+              // Кнопка удаления
+              IconButton(
+                icon: const Icon(Icons.delete, size: 20),
+                onPressed: onDelete,
+                color: Colors.grey,
               ),
             ],
           ),
@@ -506,6 +568,8 @@ class StatisticsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final habitViewModel = context.watch<HabitViewModel>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -517,7 +581,8 @@ class StatisticsScreen extends StatelessWidget {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
-      body: const Center(
+      body: habitViewModel.habits.isEmpty
+          ? const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -542,6 +607,77 @@ class StatisticsScreen extends StatelessWidget {
                 color: Colors.grey,
               ),
               textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      )
+          : Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Общая статистика',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildStatCard(
+              'Всего привычек',
+              habitViewModel.habits.length.toString(),
+              Icons.list,
+              Colors.blue,
+            ),
+            const SizedBox(height: 12),
+            _buildStatCard(
+              'Выполнено сегодня',
+              '${habitViewModel.habits.where((h) => h.isCompletedToday).length} из ${habitViewModel.habits.length}',
+              Icons.check_circle,
+              Colors.green,
+            ),
+            const SizedBox(height: 12),
+            _buildStatCard(
+              'Процент выполнения',
+              '${((habitViewModel.habits.where((h) => h.isCompletedToday).length / habitViewModel.habits.length) * 100).toStringAsFixed(1)}%',
+              Icons.trending_up,
+              Colors.orange,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
